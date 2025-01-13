@@ -69,9 +69,30 @@ pub fn masked_softmax(y: &mut Tensor<f32>) {
         }
     }
 }
-
 pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: f32) {
-    todo!("实现 rms_norm，计算前做一些必要的检查会帮助你后续调试")
+    // 检查形状是否匹配
+    assert_eq!(x.shape(), y.shape(), "x and y shapes must match");
+
+    let x_data: &[f32] = x.data();
+    let w_data: &[f32] = w.data();
+    let mut y_data: &mut [f32] = unsafe { y.data_mut() };
+
+    let dim: usize = x.shape()[x.shape().len() - 1];
+    let batch: usize = x.size() / dim;
+    for i in 0..batch {
+        let start: usize = i * dim;
+        let rms: f32 = (0..dim)
+            .map(|j| x_data[start + j] * x_data[start + j])
+            .sum::<f32>()
+            / dim as f32
+            + epsilon;
+        for j in 0..dim {
+            let norm: f32 = x_data[start + j] / rms.sqrt();
+            // 扩展 w_data 的索引，使其与 x_data 和 y_data 对应
+            let w_index = j % w_data.len();
+            y_data[start + j] = norm * w_data[w_index];
+        }
+    }
 }
 
 // y = silu(x) * y
@@ -83,13 +104,64 @@ pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
     // let _y = unsafe { y.data_mut() };
     // let _x = x.data();
 
-    todo!("实现 silu，这里给了一些前期准备工作的提示，你可以参考")
+    // todo!("实现 silu，这里给了一些前期准备工作的提示，你可以参考")
+    let len = y.size();
+    assert!(len == x.size());
+
+    let mut y_data = unsafe { y.data_mut() };
+    let x_data = x.data();
+
+    for i in 0..len {
+        let sigmoid_x = 1.0 / (1.0 + (-x_data[i]).exp());
+        let silu_x = sigmoid_x * x_data[i];
+        y_data[i] = silu_x * y_data[i];
+    }
 }
 
 // C = beta * C + alpha * A @ B^T
 // hint: You don't need to do an explicit transpose of B
 pub fn matmul_transb(c: &mut Tensor<f32>, beta: f32, a: &Tensor<f32>, b: &Tensor<f32>, alpha: f32) {
-    todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
+    // todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
+    // 检查形状是否匹配
+    assert_eq!(
+        a.shape()[1],
+        b.shape()[1],
+        "A and B shapes do not match for matrix multiplication"
+    );
+    assert_eq!(
+        a.shape()[0],
+        c.shape()[0],
+        "A and C shapes do not match for matrix multiplication"
+    );
+    assert_eq!(
+        b.shape()[0],
+        c.shape()[1],
+        "B and C shapes do not match for matrix multiplication"
+    );
+
+    let m = a.shape()[0];
+    let k = a.shape()[1];
+    let n = b.shape()[0];
+
+    let a_data = a.data();
+    let b_data = b.data();
+    let mut c_data = unsafe { c.data_mut() };
+
+    // 先将 C 乘以 beta
+    for i in 0..m * n {
+        c_data[i] *= beta;
+    }
+
+    // 计算矩阵乘法 A @ B^T
+    for i in 0..m {
+        for j in 0..n {
+            let mut sum = 0.0;
+            for l in 0..k {
+                sum += a_data[i * k + l] * b_data[j * k + l];
+            }
+            c_data[i * n + j] += alpha * sum;
+        }
+    }
 }
 
 // Dot product of two tensors (treated as vectors)

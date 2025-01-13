@@ -3,7 +3,7 @@ use std::vec;
 
 use crate::config::LlamaConfigJson;
 use crate::kvcache::KVCache;
-use crate::operators as OP;
+use crate::operators::{self as OP, matmul_transb, rms_norm, swiglu};
 use crate::params::LLamaParams;
 use crate::tensor::Tensor;
 use safetensors::SafeTensors;
@@ -156,6 +156,8 @@ fn self_attention(
     todo!("Implement self_attention");
 }
 
+use std::f32::consts::E;
+
 fn mlp(
     residual: &mut Tensor<f32>,
     hidden_states: &mut Tensor<f32>,
@@ -167,7 +169,25 @@ fn mlp(
     rms_w: &Tensor<f32>,
     eps: f32,
 ) {
-    todo!("Implement mlp");
+    // hidden = rms_norm(residual)
+    rms_norm(hidden_states, residual, rms_w, eps);
+    // gate = hidden @ gate_weight.T
+    matmul_transb(gate, 0., hidden_states, w_gate, 1.);
+    // up = hidden @ up_weight.T
+    matmul_transb(up, 0., hidden_states, w_up, 1.);
+    // act = gate * sigmoid(gate) * up
+    swiglu(up, gate);
+    // output = act @ down_weight.T
+    matmul_transb(hidden_states, 0., up, w_down, 1.);
+
+    // 先获取原始的 residual_data
+    let output = hidden_states.data();
+    let residual_len = residual.size();
+    // 再获取可变的 new_residual_data 进行修改
+    let mut residual_data = unsafe { residual.data_mut() };
+    for i in 0..residual_len {
+        residual_data[i] += output[i];
+    }
 }
 
 #[test]
