@@ -7,17 +7,17 @@ pub struct Tensor<T> {
 }
 
 impl<T: Copy + Clone + Default> Tensor<T> {
-    pub fn new(data: Vec<T>, shape: &Vec<usize>) -> Self {
+    pub fn new(data: Vec<T>, shape: &[usize]) -> Self {
         let length = data.len();
         Tensor {
             data: Arc::new(data.into_boxed_slice().try_into().unwrap()),
-            shape: shape.clone(),
+            shape: shape.to_vec(),
             offset: 0,
             length: length,
         }
     }
 
-    pub fn default(shape: &Vec<usize>) -> Self {
+    pub fn default(shape: &[usize]) -> Self {
         let length = shape.iter().product();
         let data = vec![T::default(); length];
         Self::new(data, shape)
@@ -91,5 +91,9 @@ impl Tensor<f32> {
 
 #[inline]
 pub fn float_eq(x: &f32, y: &f32, rel: f32) -> bool {
-    (x - y).abs() <= rel * (x.abs() + y.abs()) / 2.0
+    let ret = (x - y).abs() <= rel * (x.abs() + y.abs()) / 2.0;
+    if !ret {
+        println!("{} != {}", x, y);
+    }
+    ret
 }
